@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Model Competition Results</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Obituary Extraction Model Competition</h1>
+    <p class="subtitle">Claude vs GPT vs DeepSeek on historical Pennsylvania newspaper pages</p>
+  </header>
+
+  <main class="container">
+    <section class="controls-card">
+      <div>
+        <label for="csvFile" class="label">Load CSV</label>
+        <input id="csvFile" type="file" accept=".csv" />
+      </div>
+      <div class="hint">
+        Default filename expected: <code>competition_results.csv</code>
+      </div>
+      <div>
+        <input id="searchInput" type="text" placeholder="Search by person / year / date..." />
+      </div>
+    </section>
+
+    <section class="table-card">
+      <table id="summaryTable">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Year</th>
+            <th>Date</th>
+            <th>URL</th>
+            <th>Obit Count Claude</th>
+            <th>Obit Count DeepSeek</th>
+            <th>Obit Count GPT</th>
+            <th>Results</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div id="emptyState" class="empty-state">Load the CSV to view results.</div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

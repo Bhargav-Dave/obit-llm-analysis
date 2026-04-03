@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Results</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a class="back-link" href="index.html">← Back to summary</a>
+    <h1>Page-Level Comparison</h1>
+    <p id="pageMeta" class="subtitle"></p>
+  </header>
+
+  <main class="container wide-container">
+    <section class="results-grid-card">
+      <table id="detailTable" class="detail-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Original OCR text</th>
+            <th>Modernized Claude</th>
+            <th>Modernized GPT</th>
+            <th>Modernized DeepSeek</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div id="detailEmpty" class="empty-state">No page results found.</div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
