@@ -1,4 +1,4 @@
-const STORAGE_KEY = "competition_csv_text_v1";
+const STORAGE_KEY = "competition_csv_text_v2";
 
 const MODEL_CONFIG = {
   gpt: {
@@ -24,10 +24,16 @@ function isMeaningful(value) {
   return s !== "" && s.toUpperCase() !== "NA";
 }
 
-function normName(value) {
+function cleanName(value) {
   return String(value || "")
-    .toLowerCase()
     .replace(/\[.*?\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normName(value) {
+  return cleanName(value)
+    .toLowerCase()
     .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -78,67 +84,127 @@ function buildSummaryRows(rows) {
   return summary;
 }
 
-function chooseDisplayName(group) {
-  return (
-    group.baseName ||
-    group.gpt.name ||
-    group.claude.name ||
-    group.deepseek.name ||
-    "[unnamed]"
-  );
+function chooseBestDisplayName(group) {
+  const candidates = [
+    group.gpt.name,
+    group.claude.name,
+    group.deepseek.name,
+    group.baseName,
+  ].filter(isMeaningful);
+
+  if (!candidates.length) return "[unnamed]";
+
+  // prefer the longest meaningful extracted name
+  candidates.sort((a, b) => cleanName(b).length - cleanName(a).length);
+  return cleanName(candidates[0]);
+}
+
+function getModelEntry(row, modelKey) {
+  const cfg = MODEL_CONFIG[modelKey];
+  return {
+    name: isMeaningful(row[cfg.nameKey]) ? cleanName(row[cfg.nameKey]) : "",
+    ocr: isMeaningful(row[cfg.ocrKey]) ? row[cfg.ocrKey] : "NA",
+    modern: isMeaningful(row[cfg.modernKey]) ? row[cfg.modernKey] : "NA",
+  };
+}
+
+function findExistingGroup(groups, candidateName) {
+  const n = normName(candidateName);
+  if (!n) return null;
+
+  for (const group of groups) {
+    if (normName(group.baseName) === n) return group;
+    if (normName(group.gpt.name) === n) return group;
+    if (normName(group.claude.name) === n) return group;
+    if (normName(group.deepseek.name) === n) return group;
+  }
+  return null;
 }
 
 function alignPageRows(rows) {
-  const aligned = [];
-  const usedGroups = new Map();
+  const groups = [];
 
-  function getOrCreateGroup(name, baseName = "") {
-    const key = normName(name || baseName || "") || `__group_${aligned.length}_${Math.random().toString(36).slice(2, 7)}`;
-    if (usedGroups.has(key)) return usedGroups.get(key);
-    const g = {
-      key,
-      baseName,
-      gpt: { name: "", ocr: "", modern: "" },
-      claude: { name: "", ocr: "", modern: "" },
-      deepseek: { name: "", ocr: "", modern: "" },
-    };
-    usedGroups.set(key, g);
-    aligned.push(g);
-    return g;
-  }
-
-  rows.forEach(row => {
-    const baseName = row.name || "";
-    for (const [modelKey, cfg] of Object.entries(MODEL_CONFIG)) {
-      const modelName = row[cfg.nameKey];
-      if (!isMeaningful(modelName)) continue;
-      const group = getOrCreateGroup(modelName, baseName);
-      group[modelKey] = {
-        name: modelName,
-        ocr: row[cfg.ocrKey] || "NA",
-        modern: row[cfg.modernKey] || "NA",
-      };
-    }
-  });
-
-  if (aligned.length === 0) {
-    const base = rows[0]?.name || "[unnamed]";
-    aligned.push({
-      key: normName(base) || "__empty__",
-      baseName: base,
+  function createGroup(baseName = "") {
+    const group = {
+      baseName: cleanName(baseName),
       gpt: { name: "", ocr: "NA", modern: "NA" },
       claude: { name: "", ocr: "NA", modern: "NA" },
       deepseek: { name: "", ocr: "NA", modern: "NA" },
-    });
+    };
+    groups.push(group);
+    return group;
   }
 
-  return aligned.map(group => ({
-    name: chooseDisplayName(group),
-    ocr: group.gpt.ocr !== "NA" ? group.gpt.ocr : (group.claude.ocr !== "NA" ? group.claude.ocr : group.deepseek.ocr),
-    claude: group.claude.modern || "NA",
-    gpt: group.gpt.modern || "NA",
-    deepseek: group.deepseek.modern || "NA",
-  }));
+  rows.forEach(row => {
+    const baseName = cleanName(row.name || "");
+
+    const gptEntry = getModelEntry(row, "gpt");
+    const claudeEntry = getModelEntry(row, "claude");
+    const deepseekEntry = getModelEntry(row, "deepseek");
+
+    const extractedNames = [
+      gptEntry.name,
+      claudeEntry.name,
+      deepseekEntry.name,
+    ].filter(isMeaningful);
+
+    // If the row has actual extracted deceased names, align by those names
+    if (extractedNames.length) {
+      let group = null;
+
+      for (const candidateName of extractedNames) {
+        group = findExistingGroup(groups, candidateName);
+        if (group) break;
+      }
+
+      if (!group) {
+        const preferredName =
+          extractedNames.find(n => normName(n) !== normName(baseName)) ||
+          extractedNames[0] ||
+          baseName;
+        group = createGroup(preferredName);
+      }
+
+      if (isMeaningful(gptEntry.name) || isMeaningful(gptEntry.modern)) group.gpt = gptEntry;
+      if (isMeaningful(claudeEntry.name) || isMeaningful(claudeEntry.modern)) group.claude = claudeEntry;
+      if (isMeaningful(deepseekEntry.name) || isMeaningful(deepseekEntry.modern)) group.deepseek = deepseekEntry;
+
+      // if baseName is itself the obituary person, keep it; otherwise don't force it
+      if (!isMeaningful(group.baseName) && isMeaningful(baseName)) {
+        group.baseName = baseName;
+      }
+      return;
+    }
+
+    // If no model extracted a deceased name for this row, keep a fallback group
+    const fallbackGroup = createGroup(baseName);
+    fallbackGroup.gpt = gptEntry;
+    fallbackGroup.claude = claudeEntry;
+    fallbackGroup.deepseek = deepseekEntry;
+  });
+
+  if (!groups.length) {
+    const base = rows[0]?.name || "[unnamed]";
+    createGroup(base);
+  }
+
+  return groups.map(group => {
+    const displayName = chooseBestDisplayName(group);
+    const ocr =
+      group.gpt.ocr !== "NA"
+        ? group.gpt.ocr
+        : group.claude.ocr !== "NA"
+        ? group.claude.ocr
+        : group.deepseek.ocr;
+
+    return {
+      name: displayName,
+      ocr: ocr || "NA",
+      claude: group.claude.modern || "NA",
+      gpt: group.gpt.modern || "NA",
+      deepseek: group.deepseek.modern || "NA",
+    };
+  });
 }
 
 function renderSummaryTable(rows) {
