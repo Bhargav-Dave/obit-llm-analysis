@@ -1,4 +1,4 @@
-const STORAGE_KEY = "competition_csv_text_v3";
+const STORAGE_KEY = "competition_csv_text_v5";
 
 const MODEL_CONFIG = {
   gpt: {
@@ -49,9 +49,20 @@ function deriveTitle(row) {
   return "Untitled page";
 }
 
+function deriveCelebName(row) {
+  if (isMeaningful(row.searched_name)) return row.searched_name;
+  if (isMeaningful(row.name)) return row.name;
+  return "NA";
+}
+
 function countModelObits(rows, modelKey) {
   const cfg = MODEL_CONFIG[modelKey];
   return rows.filter(r => isMeaningful(r[cfg.nameKey])).length;
+}
+
+function normalizeDisagreement(value) {
+  const s = String(value || "").trim().toLowerCase();
+  return s === "yes" ? "yes" : "no";
 }
 
 function groupRowsByPage(rows) {
@@ -73,12 +84,14 @@ function buildSummaryRows(rows) {
     summary.push({
       id: encodeURIComponent(key),
       title: deriveTitle(first),
+      celebName: deriveCelebName(first),
       year: first.page_year || "",
       date: first.date_of_publication || "",
       url: first.newspaper_url || "",
       gptCount: countModelObits(pageRows, "gpt"),
       claudeCount: countModelObits(pageRows, "claude"),
       deepseekCount: countModelObits(pageRows, "deepseek"),
+      disagreement: normalizeDisagreement(first.model_disagreement),
     });
   }
 
@@ -211,6 +224,14 @@ function alignPageRows(rows) {
   });
 }
 
+function disagreementBadge(value) {
+  const normalized = normalizeDisagreement(value);
+  if (normalized === "yes") {
+    return `<span class="badge badge-yes">Yes</span>`;
+  }
+  return `<span class="badge badge-no">No</span>`;
+}
+
 function renderSummaryTable(rows) {
   const table = document.querySelector("#summaryTable tbody");
   const empty = document.getElementById("emptyState");
@@ -226,12 +247,14 @@ function renderSummaryTable(rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(row.title)}</td>
+      <td>${escapeHtml(row.celebName)}</td>
       <td>${escapeHtml(row.year)}</td>
       <td>${escapeHtml(row.date)}</td>
       <td><a class="url-link" href="${escapeAttr(row.url)}" target="_blank" rel="noopener noreferrer">Open page</a></td>
       <td><span class="badge">${row.gptCount}</span></td>
       <td><span class="badge">${row.claudeCount}</span></td>
       <td><span class="badge">${row.deepseekCount}</span></td>
+      <td>${disagreementBadge(row.disagreement)}</td>
       <td><a class="result-link" href="results.html?page=${row.id}">View</a></td>
     `;
     table.appendChild(tr);
@@ -332,7 +355,9 @@ function setupSearch(summaryRows) {
     const filtered = !q
       ? summaryRows
       : summaryRows.filter(r =>
-          [r.title, r.year, r.date].some(v => String(v).toLowerCase().includes(q))
+          [r.title, r.celebName, r.year, r.date].some(v =>
+            String(v).toLowerCase().includes(q)
+          )
         );
     renderSummaryTable(filtered);
   });
