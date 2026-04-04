@@ -1,4 +1,4 @@
-const STORAGE_KEY = "competition_csv_text_v2";
+const STORAGE_KEY = "competition_csv_text_v3";
 
 const MODEL_CONFIG = {
   gpt: {
@@ -44,7 +44,9 @@ function pageKey(row) {
 }
 
 function deriveTitle(row) {
-  return row.name || "Untitled page";
+  if (isMeaningful(row.newspaper_title)) return row.newspaper_title;
+  if (isMeaningful(row.name)) return row.name;
+  return "Untitled page";
 }
 
 function countModelObits(rows, modelKey) {
@@ -74,13 +76,18 @@ function buildSummaryRows(rows) {
       year: first.page_year || "",
       date: first.date_of_publication || "",
       url: first.newspaper_url || "",
+      gptCount: countModelObits(pageRows, "gpt"),
       claudeCount: countModelObits(pageRows, "claude"),
       deepseekCount: countModelObits(pageRows, "deepseek"),
-      gptCount: countModelObits(pageRows, "gpt"),
     });
   }
 
-  summary.sort((a, b) => String(a.year).localeCompare(String(b.year)) || String(a.date).localeCompare(String(b.date)));
+  summary.sort((a, b) =>
+    String(a.year).localeCompare(String(b.year)) ||
+    String(a.date).localeCompare(String(b.date)) ||
+    String(a.title).localeCompare(String(b.title))
+  );
+
   return summary;
 }
 
@@ -94,7 +101,6 @@ function chooseBestDisplayName(group) {
 
   if (!candidates.length) return "[unnamed]";
 
-  // prefer the longest meaningful extracted name
   candidates.sort((a, b) => cleanName(b).length - cleanName(a).length);
   return cleanName(candidates[0]);
 }
@@ -136,7 +142,7 @@ function alignPageRows(rows) {
   }
 
   rows.forEach(row => {
-    const baseName = cleanName(row.name || "");
+    const baseName = cleanName(row.aligned_person_name || row.name || "");
 
     const gptEntry = getModelEntry(row, "gpt");
     const claudeEntry = getModelEntry(row, "claude");
@@ -146,9 +152,9 @@ function alignPageRows(rows) {
       gptEntry.name,
       claudeEntry.name,
       deepseekEntry.name,
+      baseName,
     ].filter(isMeaningful);
 
-    // If the row has actual extracted deceased names, align by those names
     if (extractedNames.length) {
       let group = null;
 
@@ -169,14 +175,12 @@ function alignPageRows(rows) {
       if (isMeaningful(claudeEntry.name) || isMeaningful(claudeEntry.modern)) group.claude = claudeEntry;
       if (isMeaningful(deepseekEntry.name) || isMeaningful(deepseekEntry.modern)) group.deepseek = deepseekEntry;
 
-      // if baseName is itself the obituary person, keep it; otherwise don't force it
       if (!isMeaningful(group.baseName) && isMeaningful(baseName)) {
         group.baseName = baseName;
       }
       return;
     }
 
-    // If no model extracted a deceased name for this row, keep a fallback group
     const fallbackGroup = createGroup(baseName);
     fallbackGroup.gpt = gptEntry;
     fallbackGroup.claude = claudeEntry;
@@ -184,7 +188,7 @@ function alignPageRows(rows) {
   });
 
   if (!groups.length) {
-    const base = rows[0]?.name || "[unnamed]";
+    const base = rows[0]?.aligned_person_name || rows[0]?.name || "[unnamed]";
     createGroup(base);
   }
 
@@ -200,8 +204,8 @@ function alignPageRows(rows) {
     return {
       name: displayName,
       ocr: ocr || "NA",
-      claude: group.claude.modern || "NA",
       gpt: group.gpt.modern || "NA",
+      claude: group.claude.modern || "NA",
       deepseek: group.deepseek.modern || "NA",
     };
   });
@@ -225,9 +229,9 @@ function renderSummaryTable(rows) {
       <td>${escapeHtml(row.year)}</td>
       <td>${escapeHtml(row.date)}</td>
       <td><a class="url-link" href="${escapeAttr(row.url)}" target="_blank" rel="noopener noreferrer">Open page</a></td>
+      <td><span class="badge">${row.gptCount}</span></td>
       <td><span class="badge">${row.claudeCount}</span></td>
       <td><span class="badge">${row.deepseekCount}</span></td>
-      <td><span class="badge">${row.gptCount}</span></td>
       <td><a class="result-link" href="results.html?page=${row.id}">View</a></td>
     `;
     table.appendChild(tr);
@@ -250,7 +254,8 @@ function renderDetailPage(rows, targetKey) {
 
   empty.style.display = "none";
   const first = pageRows[0];
-  meta.textContent = `${first.name || "Untitled page"} · ${first.date_of_publication || ""} · ${first.page_year || ""}`;
+  const title = deriveTitle(first);
+  meta.textContent = `${title} · ${first.date_of_publication || ""} · ${first.page_year || ""}`;
 
   const aligned = alignPageRows(pageRows);
   aligned.forEach(row => {
@@ -258,8 +263,8 @@ function renderDetailPage(rows, targetKey) {
     tr.innerHTML = `
       <td>${escapeHtml(row.name)}</td>
       <td class="prewrap">${escapeHtml(row.ocr || "NA")}</td>
-      <td class="prewrap">${escapeHtml(row.claude || "NA")}</td>
       <td class="prewrap">${escapeHtml(row.gpt || "NA")}</td>
+      <td class="prewrap">${escapeHtml(row.claude || "NA")}</td>
       <td class="prewrap">${escapeHtml(row.deepseek || "NA")}</td>
     `;
     tbody.appendChild(tr);
@@ -324,9 +329,11 @@ function setupSearch(summaryRows) {
 
   input.addEventListener("input", () => {
     const q = input.value.toLowerCase().trim();
-    const filtered = !q ? summaryRows : summaryRows.filter(r =>
-      [r.title, r.year, r.date].some(v => String(v).toLowerCase().includes(q))
-    );
+    const filtered = !q
+      ? summaryRows
+      : summaryRows.filter(r =>
+          [r.title, r.year, r.date].some(v => String(v).toLowerCase().includes(q))
+        );
     renderSummaryTable(filtered);
   });
 }
