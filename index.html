@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Model Competition Results</title>
+  <title>Obit LLM Analysis</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -18,11 +18,17 @@
         <label for="csvFile" class="label">Load CSV</label>
         <input id="csvFile" type="file" accept=".csv" />
       </div>
+
       <div class="hint">
-        Default filename expected: <code>competition_results.csv</code>
+        Default file used by the site: <code>competition_results.csv</code>
       </div>
+
       <div>
-        <input id="searchInput" type="text" placeholder="Search by newspaper / celeb / year / date..." />
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="Search by newspaper, celeb, year, or date..."
+        />
       </div>
     </section>
 
@@ -38,12 +44,12 @@
             <th>Obit Count GPT</th>
             <th>Obit Count Claude</th>
             <th>Obit Count DeepSeek</th>
-            <th>Disagreement</th>
             <th>Results</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
+
       <div id="emptyState" class="empty-state">Load the CSV to view results.</div>
     </section>
   </main>

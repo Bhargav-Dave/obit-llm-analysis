@@ -1,4 +1,4 @@
-const STORAGE_KEY = "competition_csv_text_v5";
+const STORAGE_KEY = "competition_csv_text_v6";
 
 const MODEL_CONFIG = {
   gpt: {
@@ -40,17 +40,20 @@ function normName(value) {
 }
 
 function pageKey(row) {
-  return [row.newspaper_url, row.date_of_publication, row.page_year].join("||");
+  return [
+    row.name || "",
+    row.newspaper_url || "",
+    row.date_of_publication || "",
+    row.page_year || ""
+  ].join("||");
 }
 
 function deriveTitle(row) {
   if (isMeaningful(row.newspaper_title)) return row.newspaper_title;
-  if (isMeaningful(row.name)) return row.name;
-  return "Untitled page";
+  return "NA";
 }
 
 function deriveCelebName(row) {
-  if (isMeaningful(row.searched_name)) return row.searched_name;
   if (isMeaningful(row.name)) return row.name;
   return "NA";
 }
@@ -58,11 +61,6 @@ function deriveCelebName(row) {
 function countModelObits(rows, modelKey) {
   const cfg = MODEL_CONFIG[modelKey];
   return rows.filter(r => isMeaningful(r[cfg.nameKey])).length;
-}
-
-function normalizeDisagreement(value) {
-  const s = String(value || "").trim().toLowerCase();
-  return s === "yes" ? "yes" : "no";
 }
 
 function groupRowsByPage(rows) {
@@ -91,14 +89,14 @@ function buildSummaryRows(rows) {
       gptCount: countModelObits(pageRows, "gpt"),
       claudeCount: countModelObits(pageRows, "claude"),
       deepseekCount: countModelObits(pageRows, "deepseek"),
-      disagreement: normalizeDisagreement(first.model_disagreement),
     });
   }
 
   summary.sort((a, b) =>
     String(a.year).localeCompare(String(b.year)) ||
     String(a.date).localeCompare(String(b.date)) ||
-    String(a.title).localeCompare(String(b.title))
+    String(a.title).localeCompare(String(b.title)) ||
+    String(a.celebName).localeCompare(String(b.celebName))
   );
 
   return summary;
@@ -224,14 +222,6 @@ function alignPageRows(rows) {
   });
 }
 
-function disagreementBadge(value) {
-  const normalized = normalizeDisagreement(value);
-  if (normalized === "yes") {
-    return `<span class="badge badge-yes">Yes</span>`;
-  }
-  return `<span class="badge badge-no">No</span>`;
-}
-
 function renderSummaryTable(rows) {
   const table = document.querySelector("#summaryTable tbody");
   const empty = document.getElementById("emptyState");
@@ -254,7 +244,6 @@ function renderSummaryTable(rows) {
       <td><span class="badge">${row.gptCount}</span></td>
       <td><span class="badge">${row.claudeCount}</span></td>
       <td><span class="badge">${row.deepseekCount}</span></td>
-      <td>${disagreementBadge(row.disagreement)}</td>
       <td><a class="result-link" href="results.html?page=${row.id}">View</a></td>
     `;
     table.appendChild(tr);
@@ -278,7 +267,8 @@ function renderDetailPage(rows, targetKey) {
   empty.style.display = "none";
   const first = pageRows[0];
   const title = deriveTitle(first);
-  meta.textContent = `${title} · ${first.date_of_publication || ""} · ${first.page_year || ""}`;
+  const celebName = deriveCelebName(first);
+  meta.textContent = `${title} · ${celebName} · ${first.date_of_publication || ""} · ${first.page_year || ""}`;
 
   const aligned = alignPageRows(pageRows);
   aligned.forEach(row => {
@@ -376,6 +366,7 @@ async function init() {
   const summaryRows = buildSummaryRows(rows);
   renderSummaryTable(summaryRows);
   setupSearch(summaryRows);
+
   setupCsvInput(newRows => {
     const newSummary = buildSummaryRows(newRows);
     renderSummaryTable(newSummary);
