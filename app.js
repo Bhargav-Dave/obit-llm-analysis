@@ -1,4 +1,15 @@
-const STORAGE_KEY = "competition_csv_text_v6";
+const DATASETS = {
+  "competition_results.csv": {
+    label: "Competition Result 1",
+    descriptor:
+      "Run 1: max tokens used were 10000 for each model. Processing stopped early because credits ran out after 43 rows.",
+  },
+  "competition_results2.csv": {
+    label: "Competition Result 2",
+    descriptor:
+      "Run 2: max tokens used were 4000 for each model, and all 143 rows were processed.",
+  },
+};
 
 const MODEL_CONFIG = {
   gpt: {
@@ -17,6 +28,13 @@ const MODEL_CONFIG = {
     modernKey: "modernized_text_deepseek_r1",
   },
 };
+
+function getDatasetMeta(datasetName) {
+  return DATASETS[datasetName] || {
+    label: datasetName,
+    descriptor: "",
+  };
+}
 
 function isMeaningful(value) {
   if (value === null || value === undefined) return false;
@@ -73,7 +91,7 @@ function groupRowsByPage(rows) {
   return grouped;
 }
 
-function buildSummaryRows(rows) {
+function buildSummaryRows(rows, datasetName) {
   const grouped = groupRowsByPage(rows);
   const summary = [];
 
@@ -81,6 +99,7 @@ function buildSummaryRows(rows) {
     const first = pageRows[0];
     summary.push({
       id: encodeURIComponent(key),
+      dataset: datasetName,
       title: deriveTitle(first),
       celebName: deriveCelebName(first),
       year: first.page_year || "",
@@ -222,6 +241,23 @@ function alignPageRows(rows) {
   });
 }
 
+async function loadCsv(datasetName) {
+  const res = await fetch(datasetName);
+  if (!res.ok) {
+    throw new Error(`Could not load ${datasetName}`);
+  }
+
+  const text = await res.text();
+  return new Promise((resolve, reject) => {
+    Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      complete: results => resolve(results.data),
+      error: err => reject(err),
+    });
+  });
+}
+
 function renderSummaryTable(rows) {
   const table = document.querySelector("#summaryTable tbody");
   const empty = document.getElementById("emptyState");
@@ -229,8 +265,10 @@ function renderSummaryTable(rows) {
 
   if (!rows.length) {
     empty.style.display = "block";
+    empty.textContent = "No rows found for this run.";
     return;
   }
+
   empty.style.display = "none";
 
   rows.forEach(row => {
@@ -241,22 +279,34 @@ function renderSummaryTable(rows) {
       <td>${escapeHtml(row.year)}</td>
       <td>${escapeHtml(row.date)}</td>
       <td><a class="url-link" href="${escapeAttr(row.url)}" target="_blank" rel="noopener noreferrer">Open page</a></td>
-      <td><span class="badge">${row.gptCount}</span></td>
-      <td><span class="badge">${row.claudeCount}</span></td>
-      <td><span class="badge">${row.deepseekCount}</span></td>
-      <td><a class="result-link" href="results.html?page=${row.id}">View</a></td>
+      <td><span class="badge badge-count">${row.gptCount}</span></td>
+      <td><span class="badge badge-count">${row.claudeCount}</span></td>
+      <td><span class="badge badge-count">${row.deepseekCount}</span></td>
+      <td><a class="result-link" href="results.html?page=${row.id}&dataset=${encodeURIComponent(row.dataset)}">View</a></td>
     `;
     table.appendChild(tr);
   });
 }
 
-function renderDetailPage(rows, targetKey) {
+function renderDetailPage(rows, targetKey, datasetName) {
   const grouped = groupRowsByPage(rows);
   const pageRows = grouped.get(decodeURIComponent(targetKey || "")) || [];
   const tbody = document.querySelector("#detailTable tbody");
   const empty = document.getElementById("detailEmpty");
   const meta = document.getElementById("pageMeta");
+  const descriptorEl = document.getElementById("resultDescriptor");
+  const backLink = document.getElementById("backLink");
+
   tbody.innerHTML = "";
+
+  const datasetMeta = getDatasetMeta(datasetName);
+  if (descriptorEl) {
+    descriptorEl.textContent = datasetMeta.descriptor;
+  }
+
+  if (backLink) {
+    backLink.href = `index.html?dataset=${encodeURIComponent(datasetName)}`;
+  }
 
   if (!pageRows.length) {
     empty.style.display = "block";
@@ -284,29 +334,35 @@ function renderDetailPage(rows, targetKey) {
   });
 }
 
-function parseCsvText(text) {
-  return new Promise((resolve, reject) => {
-    Papa.parse(text, {
-      header: true,
-      skipEmptyLines: true,
-      complete: results => resolve(results.data),
-      error: err => reject(err),
-    });
+function setupSearch(allRowsGetter) {
+  const input = document.getElementById("searchInput");
+  if (!input) return;
+
+  input.addEventListener("input", () => {
+    const q = input.value.toLowerCase().trim();
+    const rows = allRowsGetter();
+    const filtered = !q
+      ? rows
+      : rows.filter(r =>
+          [r.title, r.celebName, r.year, r.date].some(v =>
+            String(v).toLowerCase().includes(q)
+          )
+        );
+    renderSummaryTable(filtered);
   });
 }
 
-async function loadDefaultCsv() {
-  try {
-    const res = await fetch("competition_results.csv");
-    if (!res.ok) throw new Error("No default CSV found");
-    const text = await res.text();
-    localStorage.setItem(STORAGE_KEY, text);
-    return await parseCsvText(text);
-  } catch {
-    const cached = localStorage.getItem(STORAGE_KEY);
-    if (cached) return await parseCsvText(cached);
-    return [];
-  }
+function updateTabUI(datasetName) {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.dataset === datasetName);
+  });
+
+  const meta = getDatasetMeta(datasetName);
+  const descriptor = document.getElementById("runDescriptor");
+  const datasetPill = document.getElementById("datasetPill");
+
+  if (descriptor) descriptor.textContent = meta.descriptor;
+  if (datasetPill) datasetPill.textContent = meta.label;
 }
 
 function escapeHtml(str) {
@@ -322,56 +378,59 @@ function escapeAttr(str) {
   return escapeHtml(str);
 }
 
-function setupCsvInput(onRows) {
-  const input = document.getElementById("csvFile");
-  if (!input) return;
+async function initIndexPage() {
+  const params = new URLSearchParams(window.location.search);
+  let currentDataset = params.get("dataset") || "competition_results.csv";
 
-  input.addEventListener("change", async event => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    localStorage.setItem(STORAGE_KEY, text);
-    const rows = await parseCsvText(text);
-    onRows(rows);
+  if (!DATASETS[currentDataset]) {
+    currentDataset = "competition_results.csv";
+  }
+
+  let currentSummaryRows = [];
+
+  async function loadAndRender(datasetName) {
+    currentDataset = datasetName;
+    updateTabUI(datasetName);
+
+    const rows = await loadCsv(datasetName);
+    currentSummaryRows = buildSummaryRows(rows, datasetName);
+    renderSummaryTable(currentSummaryRows);
+
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set("dataset", datasetName);
+    window.history.replaceState({}, "", newUrl.toString());
+  }
+
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await loadAndRender(btn.dataset.dataset);
+    });
   });
+
+  setupSearch(() => currentSummaryRows);
+  await loadAndRender(currentDataset);
 }
 
-function setupSearch(summaryRows) {
-  const input = document.getElementById("searchInput");
-  if (!input) return;
+async function initResultsPage() {
+  const params = new URLSearchParams(window.location.search);
+  const targetKey = params.get("page");
+  let datasetName = params.get("dataset") || "competition_results.csv";
 
-  input.addEventListener("input", () => {
-    const q = input.value.toLowerCase().trim();
-    const filtered = !q
-      ? summaryRows
-      : summaryRows.filter(r =>
-          [r.title, r.celebName, r.year, r.date].some(v =>
-            String(v).toLowerCase().includes(q)
-          )
-        );
-    renderSummaryTable(filtered);
-  });
+  if (!DATASETS[datasetName]) {
+    datasetName = "competition_results.csv";
+  }
+
+  const rows = await loadCsv(datasetName);
+  renderDetailPage(rows, targetKey, datasetName);
 }
 
 async function init() {
-  const rows = await loadDefaultCsv();
-  const isResultsPage = location.pathname.endsWith("results.html");
-
+  const isResultsPage = window.location.pathname.endsWith("results.html");
   if (isResultsPage) {
-    const params = new URLSearchParams(location.search);
-    renderDetailPage(rows, params.get("page"));
-    return;
+    await initResultsPage();
+  } else {
+    await initIndexPage();
   }
-
-  const summaryRows = buildSummaryRows(rows);
-  renderSummaryTable(summaryRows);
-  setupSearch(summaryRows);
-
-  setupCsvInput(newRows => {
-    const newSummary = buildSummaryRows(newRows);
-    renderSummaryTable(newSummary);
-    setupSearch(newSummary);
-  });
 }
 
 init();

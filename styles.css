@@ -6,6 +6,7 @@
   --muted: #6e6558;
   --accent: #6f5a3f;
   --accent-soft: #efe6d7;
+  --accent-soft-2: #e7dcc8;
 }
 
 * { box-sizing: border-box; }
@@ -51,6 +52,7 @@ body {
   max-width: 1900px;
 }
 
+.tabs-card,
 .controls-card,
 .table-card,
 .results-grid-card {
@@ -61,9 +63,52 @@ body {
   box-shadow: 0 4px 14px rgba(0,0,0,0.04);
 }
 
+.tabs-card {
+  margin-bottom: 18px;
+}
+
+.tabs-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.tab-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--accent);
+  padding: 10px 14px;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  background: var(--accent-soft);
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.run-descriptor,
+.results-descriptor {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px 14px;
+  line-height: 1.45;
+}
+
 .controls-card {
   display: grid;
-  grid-template-columns: 220px 1fr 320px;
+  grid-template-columns: 1.4fr 1fr 220px;
   gap: 14px;
   align-items: end;
   margin-bottom: 18px;
@@ -80,8 +125,13 @@ body {
   align-self: center;
 }
 
-input[type="text"],
-input[type="file"] {
+.dataset-pill-wrap {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+input[type="text"] {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -127,11 +177,11 @@ th {
 #summaryTable th:nth-child(8) { width: 9%; }
 #summaryTable th:nth-child(9) { width: 8%; }
 
-.detail-table th:nth-child(1) { width: 11%; }
+.detail-table th:nth-child(1) { width: 12%; }
 .detail-table th:nth-child(2),
 .detail-table th:nth-child(3),
 .detail-table th:nth-child(4),
-.detail-table th:nth-child(5) { width: 22.25%; }
+.detail-table th:nth-child(5) { width: 22%; }
 
 .url-link,
 .result-link {
@@ -162,4 +212,15 @@ th {
   background: var(--accent-soft);
   color: var(--accent);
   font-size: 0.9rem;
+}
+
+.badge-count {
+  min-width: 32px;
+  text-align: center;
+}
+
+code {
+  background: var(--accent-soft-2);
+  padding: 2px 6px;
+  border-radius: 6px;
 }
