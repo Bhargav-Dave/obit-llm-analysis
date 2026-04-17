@@ -271,9 +271,10 @@ function renderSummaryTable(rows) {
 
   empty.style.display = "none";
 
-  rows.forEach(row => {
+  rows.forEach((row, index) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td class="sr-cell">${index + 1}</td>
       <td>${escapeHtml(row.title)}</td>
       <td>${escapeHtml(row.celebName)}</td>
       <td>${escapeHtml(row.year)}</td>
@@ -321,9 +322,10 @@ function renderDetailPage(rows, targetKey, datasetName) {
   meta.textContent = `${title} · ${celebName} · ${first.date_of_publication || ""} · ${first.page_year || ""}`;
 
   const aligned = alignPageRows(pageRows);
-  aligned.forEach(row => {
+  aligned.forEach((row, index) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td class="sr-cell">${index + 1}</td>
       <td>${escapeHtml(row.name)}</td>
       <td class="prewrap">${escapeHtml(row.ocr || "NA")}</td>
       <td class="prewrap">${escapeHtml(row.gpt || "NA")}</td>
